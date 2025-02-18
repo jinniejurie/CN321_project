@@ -1,0 +1,41 @@
+/* Lobby.css */
+.lobby-container {
+    text-align: center;
+    margin-top: 50px;
+  }
+  
+  .lobby-input {
+    margin: 10px 0;
+    padding: 8px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+  
+  .lobby-button {
+    padding: 8px 15px;
+    font-size: 1rem;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+  }
+  
+  .lobby-button:disabled {
+    background-color: #ccc;
+  }
+  
+  .lobby-players {
+    margin-top: 20px;
+    list-style: none;
+    padding: 0;
+  }
+  
+  .lobby-players li {
+    background: #f1f1f1;
+    margin: 5px 0;
+    padding: 10px;
+    border-radius: 5px;
+  }

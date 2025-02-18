@@ -1,5 +1,7 @@
+// Game.js
 import React, { useState, useEffect } from "react";
 import io from "socket.io-client";
+import GameUI from "./GameUI";
 
 const socket = io("http://localhost:4000");
 
@@ -12,7 +14,6 @@ const Game = () => {
 
   useEffect(() => {
     socket.on("gameStarted", ({ role, location }) => {
-      console.log("Received gameStarted event:", { role, location });
       setRole(role);
       setLocation(location);
     });
@@ -45,27 +46,15 @@ const Game = () => {
   };
 
   return (
-    <div>
-      <h2>Game Started</h2>
-      <h3>Your Role: {role || "Waiting..."}</h3>
-      {role !== "Spy" && <h3>Location: {location || "Waiting..."}</h3>}
-      <h3>Time Left: {Math.floor(timer / 60)}:{("0" + (timer % 60)).slice(-2)}</h3>
-
-      <div>
-        <h3>Chat Room</h3>
-        <div>
-          {messages.map((msg, index) => (
-            <p key={index}>{msg.sender}: {msg.message}</p>
-          ))}
-        </div>
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        <button onClick={sendMessage}>Send</button>
-      </div>
-    </div>
+    <GameUI
+      role={role}
+      location={location}
+      timer={timer}
+      messages={messages}
+      message={message}
+      setMessage={setMessage}
+      sendMessage={sendMessage}
+    />
   );
 };
 

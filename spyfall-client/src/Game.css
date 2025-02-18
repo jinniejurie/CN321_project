@@ -1,0 +1,35 @@
+/* Game.css */
+.game-container {
+    text-align: center;
+    font-family: Arial, sans-serif;
+  }
+  
+  .chat-room {
+    margin-top: 20px;
+    border-top: 1px solid #ccc;
+    padding-top: 10px;
+  }
+  
+  .message-box {
+    width: 100%;
+    height: 200px;
+    border: 1px solid #ddd;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f9f9f9;
+  }
+  
+  .input-container {
+    margin-top: 10px;
+  }
+  
+  .input-container input {
+    width: 70%;
+    padding: 5px;
+  }
+  
+  .input-container button {
+    padding: 5px 10px;
+    margin-left: 5px;
+    cursor: pointer;
+  }
