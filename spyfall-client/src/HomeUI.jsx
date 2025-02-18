@@ -5,17 +5,19 @@ import "./Home.css";
 
 const HomeUI = () => {
   return (
-    <div className="home-container">
-      <h1 className="home-title">Spyfall Game</h1>
-      <div className="home-buttons">
-        <Link to="/lobby">
-          <button>Start Game</button>
-        </Link>
-        <Link to="/tutorial">
-          <button>How to Play</button>
-        </Link>
+      <body className="home-body">
+      <div className="home-container">
+          <img className="home-img" src="https://i.ibb.co/k2JWmmtf/homeicon.png"/>
+          <div className="home-buttons">
+              <Link to="/lobby">
+                  <button className="start">Start !</button>
+              </Link>
+              <Link to="/tutorial">
+                  <button className="tut">Tutorial</button>
+              </Link>
+          </div>
       </div>
-    </div>
+      </body>
   );
 };
 
