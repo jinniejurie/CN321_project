@@ -1,0 +1,63 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Funnel+Display:wght@300..800&display=swap");
+
+body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+.tutorial-page {
+  background-color: #F8F9EF;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: "DM Sans", serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  color: #F8F9EF;
+}
+
+/* กล่อง container หลัก */
+.tutorial-container {
+  background-color: #252526;
+  width: 94vw;
+  height: 94vh;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ส่วนที่ 1: หัวข้อ How to Play */
+.tutorial-title {
+  font-size: 3rem;
+  margin: 40px 0 20px 0;
+  font-weight: 600;
+}
+
+/* ส่วนที่ 2: คำอธิบาย */
+.tutorial-description {
+  font-size: 1.2rem;
+  font-weight: 500;
+  max-width: 80%; /* จำกัดความกว้างของคำอธิบาย */
+}
+
+/* ส่วนที่ 3: ลิงค์กลับหน้าแรก */
+.tutorial-link {
+  margin-top: auto; /* ทำให้ปุ่มอยู่ที่ด้านล่าง */
+  margin-bottom: 60px;
+  padding: 0 20px;
+  background-color: #689cab;
+  color: white;
+  text-decoration: none;
+  border-radius: 100px;
+  font-size: 1.2rem;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+  justify-content: flex-end;
+}
+.tutorial-link:hover {
+  background-color: #a0adb7; /* เปลี่ยนสีเมื่อ hover */
+}
