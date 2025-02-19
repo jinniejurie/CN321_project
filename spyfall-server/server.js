@@ -15,7 +15,7 @@ const locations = ["Beach", "Restaurant", "Airport", "Bank", "School"];
 let gameData = { location: "", spy: null, timer: 300 };
 
 io.on("connection", (socket) => {
-  console.log(`User connected: ${socket.id}`);
+  console.log("New connection:", socket.id);
 
   socket.on("joinGame", (name) => {
     if (!players.some((p) => p.id === socket.id)) {
@@ -54,13 +54,14 @@ function startGame() {
   gameData.spy = players[spyIndex].id;
   gameData.timer = 300;
 
-  console.log(`Game started! Location: ${randomLocation}, Spy: ${players[spyIndex].name}`);
+  console.log(`🎮 Game started! Location: ${randomLocation}, Spy: ${players[spyIndex].name}`);
 
   players.forEach((player) => {
     const role = player.id === gameData.spy ? "Spy" : "Civilian";
-    console.log(`Player: ${player.name}, Role: ${role}`);
 
-    io.to(player.id).emit("gameStarted", { role, location: role === "Spy" ? "Unknown" : randomLocation });
+    console.log(`Sending gameStarted to ${player.id} (Role: ${role}, Location: ${role === "Spy" ? "Unknown" : gameData.location})`);
+
+    io.to(player.id).emit("gameStarted", { role, location: role === "Spy" ? "Unknown" : gameData.location });
   });
 
   io.emit("startTimer", gameData.timer);
@@ -68,7 +69,7 @@ function startGame() {
 }
 
 function startTimer() {
-  const interval = setInterval(() => {
+  let interval = setInterval(() => {
     if (gameData.timer > 0) {
       gameData.timer--;
       io.emit("updateTimer", gameData.timer);

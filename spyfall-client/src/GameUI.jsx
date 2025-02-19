@@ -1,27 +1,40 @@
-// GameUI.jsx
 import React from "react";
 import "./Game.css";
 
-const GameUI = ({ role, location, timer, messages, message, setMessage, sendMessage }) => {
+const GameUI = ({ role, location, options = [], messages = [], message, setMessage, sendMessage }) => {
+  console.log("Role in GameUI:", role);
+  console.log("Location in GameUI:", location);
+
   return (
     <div className="game-container">
-      <h2>Game Started</h2>
-      <h3>Your Role: {role || "Waiting..."}</h3>
-      {role !== "Spy" && <h3>Location: {location || "Waiting..."}</h3>}
-      <h3>Time Left: {Math.floor(timer / 60)}:{("0" + (timer % 60)).slice(-2)}</h3>
+      <div className="player-info">
+        <div className="avatar"></div>
+        <h3>Player 1</h3>
+        <p>Location: {role !== "Spy" ? location : "???"}</p>
 
-      <div className="chat-room">
-        <h3>Chat Room</h3>
-        <div className="message-box">
-          {messages.map((msg, index) => (
-            <p key={index}>{msg.sender}: {msg.message}</p>
+        <div className="location-options">
+          {options.map((opt, index) => (
+            <p key={index}>{opt}</p>
           ))}
         </div>
-        <div className="input-container">
+      </div>
+
+      <div className="chat-room">
+        {messages.map((msg, index) => (
+          <div key={index} className="chat-message">
+            <div className="chat-avatar"></div>
+            <div className="chat-text">
+              <strong>{msg.sender}</strong>: {msg.message}
+            </div>
+          </div>
+        ))}
+
+        <div className="chat-input">
           <input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
+            placeholder="Type a message..."
           />
           <button onClick={sendMessage}>Send</button>
         </div>

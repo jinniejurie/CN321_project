@@ -1,46 +1,59 @@
-// Game.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import io from "socket.io-client";
 import GameUI from "./GameUI";
 
-const socket = io("http://localhost:4000");
-
 const Game = () => {
-  const [messages, setMessages] = useState([]);
-  const [message, setMessage] = useState("");
+  const socketRef = useRef(null);
   const [role, setRole] = useState("");
   const [location, setLocation] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [message, setMessage] = useState("");
   const [timer, setTimer] = useState(300);
 
   useEffect(() => {
-    socket.on("gameStarted", ({ role, location }) => {
-      setRole(role);
-      setLocation(location);
-    });
+    if (!socketRef.current) {
+      socketRef.current = io("http://localhost:4000");
 
-    socket.on("receiveMessage", (msg) => {
-      setMessages((prev) => [...prev, msg]);
-    });
+      socketRef.current.on("connect", () => {
+        console.log("Connected to Socket! ID:", socketRef.current.id);
+      });
 
-    socket.on("updateTimer", (time) => {
-      setTimer(time);
-    });
+      socketRef.current.on("disconnect", () => {
+        console.log("Disconnected from server");
+      });
 
-    socket.on("gameOver", ({ result }) => {
-      alert(result);
-    });
+      socketRef.current.on("gameStarted", ({ role, location }) => {
+        console.log("Game Started! Role:", role, "Location:", location);
+        setRole(role);
+        setLocation(location);
+      });
+
+      socketRef.current.on("receiveMessage", (msg) => {
+        setMessages((prev) => [...prev, msg]);
+      });
+
+      socketRef.current.on("updateTimer", (time) => {
+        setTimer(time);
+      });
+
+      socketRef.current.on("gameOver", ({ result }) => {
+        alert(result);
+      });
+    }
 
     return () => {
-      socket.off("gameStarted");
-      socket.off("receiveMessage");
-      socket.off("updateTimer");
-      socket.off("gameOver");
+      if (socketRef.current) {
+        socketRef.current.off("gameStarted");
+        socketRef.current.off("receiveMessage");
+        socketRef.current.off("updateTimer");
+        socketRef.current.off("gameOver");
+      }
     };
   }, []);
 
   const sendMessage = () => {
     if (message.trim()) {
-      socket.emit("sendMessage", message);
+      socketRef.current.emit("sendMessage", message);
       setMessage("");
     }
   };
