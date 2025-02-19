@@ -32,6 +32,7 @@ io.on("connection", (socket) => {
   socket.on("sendMessage", (message) => {
     const player = players.find((p) => p.id === socket.id);
     if (player) {
+      console.log(`Message from ${player.name}: ${message}`);
       io.emit("receiveMessage", { sender: player.name, message });
     }
   });
@@ -58,23 +59,30 @@ function startGame() {
 
   players.forEach((player) => {
     const role = player.id === gameData.spy ? "Spy" : "Civilian";
-    console.log(`Player: ${player.name}, Role: ${role}`);
+    const locationToSend = role === "Spy" ? "Unknown" : gameData.location;
 
-    io.to(player.id).emit("gameStarted", { role, location: role === "Spy" ? "Unknown" : randomLocation });
+    console.log(`Sending gameStarted to ${player.name}: Role = ${role}, Location = ${locationToSend}`); //เช็คค่า server
+
+    io.to(player.id).emit("gameStarted", { role, location: locationToSend });
   });
 
   io.emit("startTimer", gameData.timer);
   startTimer();
 }
 
+let gameInterval = null;
+
 function startTimer() {
-  const interval = setInterval(() => {
+  if (gameInterval) clearInterval(gameInterval); // หยุด timer ก่อนหน้า
+
+  gameInterval = setInterval(() => {
     if (gameData.timer > 0) {
       gameData.timer--;
       io.emit("updateTimer", gameData.timer);
     } else {
       io.emit("gameOver", { result: "Time's up! Spy wins!" });
-      clearInterval(interval);
+      clearInterval(gameInterval);
+      gameInterval = null; // รีเซ็ตตัวแปร
     }
   }, 1000);
 }

@@ -3,6 +3,7 @@ import React from "react";
 import "./Game.css";
 
 const GameUI = ({ role, location, timer, messages, message, setMessage, sendMessage }) => {
+  console.log("Rendering UI with role:", role, "location:", location);
   return (
     <div className="game-container">
       <h2>Game Started</h2>
