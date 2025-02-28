@@ -1,17 +1,27 @@
 .home-body {
     background-color: #F8F9EF;
-}
-
-.home-img {
-    width: 900px;
-    height: 520px;
-    margin: 50px;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
 }
 
 .home-container {
     display: flex;
-    margin-top: 50px;
+    flex-direction: row;
     align-items: center;
+    justify-content: center;
+    padding: 20px;
+    max-width: 1400px;
+    width: 100%;
+}
+
+.home-img {
+    max-width: 900px;
+    width: 60%;
+    height: auto;
+    margin: 20px;
 }
 
 .home-buttons {
@@ -39,4 +49,58 @@
 
 .home-buttons button:hover {
     background-color: #5a4a3d;
+}
+
+/* Media queries for responsiveness */
+@media (max-width: 1200px) {
+    .home-img {
+        width: 50%;
+    }
+    
+    .home-buttons button {
+        width: 300px;
+        height: 90px;
+        font-size: 36px;
+    }
+}
+
+@media (max-width: 992px) {
+    .home-container {
+        flex-direction: column;
+    }
+    
+    .home-img {
+        width: 80%;
+        max-width: 700px;
+        margin: 30px 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .home-img {
+        width: 90%;
+    }
+    
+    .home-buttons {
+        gap: 30px;
+    }
+    
+    .home-buttons button {
+        width: 280px;
+        height: 80px;
+        font-size: 32px;
+    }
+}
+
+@media (max-width: 480px) {
+    .home-img {
+        width: 95%;
+        margin: 20px 0;
+    }
+    
+    .home-buttons button {
+        width: 220px;
+        height: 70px;
+        font-size: 28px;
+    }
 }
