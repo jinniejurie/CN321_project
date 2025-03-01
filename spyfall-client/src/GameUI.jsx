@@ -28,19 +28,20 @@ const GameUI = ({
         <h3>{playerName}</h3>
         <div className="role-info">
           <p>Your Role: <strong>{role || "Waiting..."}</strong></p>
-          <p>Location: <strong>{role === "Spy" ? "???" : location || "Waiting..."}</strong></p>
+          <p>Location: <strong>{location || "Waiting..."}</strong></p>
         </div>
 
-        {role === "Spy" && options.length > 0 && (
-          <div className="location-options">
-            <h4>Possible Locations:</h4>
+        {/* Show Possible Locations for everyone */}
+        <div className="location-options">
+          <h4>Possible Locations:</h4>
+          <div className="location-list">
             <ul>
               {options.map((opt, index) => (
                 <li key={index}>{opt}</li>
               ))}
             </ul>
           </div>
-        )}
+        </div>
       </div>
 
       <div className="chat-room">
@@ -50,8 +51,8 @@ const GameUI = ({
           ) : (
             messages.map((msg, index) => (
               <div key={index} className={`chat-message ${msg.sender === playerName ? 'own-message' : ''}`}>
-                <div className="chat-avatar"></div>
-                <div className="chat-text">
+                <div className={`chat-avatar ${msg.sender === playerName ? 'right' : 'left'}`}></div>
+                <div className={`chat-text ${msg.sender === playerName ? 'right' : 'left'}`}>
                   <strong>{msg.sender}</strong>: {msg.message}
                 </div>
               </div>
