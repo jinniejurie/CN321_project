@@ -16,6 +16,12 @@ const GameUI = ({
   const [showLocationInfo, setShowLocationInfo] = useState(true);
   const messagesEndRef = useRef(null);
 
+  useEffect(() => {
+    console.log("Current role:", role);
+    console.log("Current location:", location);
+    console.log("Current timer:", timer);
+  }, [role, location, timer]);
+
   // Automatically scroll to bottom of chat
   useEffect(() => {
     if (messagesEndRef.current) {

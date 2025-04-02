@@ -2,6 +2,10 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
+require('dotenv').config();
+
+// Import locations from separate file
+const locations = require('./locations');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,19 +15,11 @@ const io = new Server(server, {
   },
 });
 
-// รายการห้องทั้งหมด - ในตัวอย่างนี้เราเก็บในหน่วยความจำแทนการใช้ MongoDB
+// เก็บข้อมูลห้องในหน่วยความจำ
 const rooms = new Map();
+const gameTimers = new Map();
 
-// รายการสถานที่ที่เป็นไปได้
-const locations = [
-  "Beach", "Restaurant", "Airport", "Bank", "School", "Casino", 
-  "Hotel", "Supermarket", "Hospital", "Military Base", "Space Station", 
-  "Movie Studio", "University", "Cruise Ship", "Submarine", "Theater",
-  "Circus", "Cemetery", "Prison", "Police Station", "Train Station",
-  "Embassy", "Amusement Park", "Museum", "Library", "Golf Course"
-];
-
-// สร้างรหัสห้องที่ไม่ซ้ำกัน (5 หลัก)
+// สร้างรหัสห้องที่ไม่ซ้ำกัน
 function generateRoomCode() {
   while (true) {
     const code = Math.floor(10000 + Math.random() * 90000).toString();
@@ -33,32 +29,46 @@ function generateRoomCode() {
   }
 }
 
-// Serve static files from public directory
+// Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// สำหรับการส่งหน้าเว็บแอปไปให้ไคลเอนต์
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// API route to check server status
+app.get('/api/status', (req, res) => {
+  res.json({ status: 'online' });
 });
 
-// Socket.io connection handler
+// API route to view all rooms (สำหรับการพัฒนาเท่านั้น)
+app.get('/api/rooms', (req, res) => {
+  const roomsData = Array.from(rooms.entries()).map(([code, room]) => ({
+    code,
+    playersCount: room.players.length,
+    isActive: room.gameState.active,
+    settings: room.settings
+  }));
+  res.json(roomsData);
+});
+
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
   // สร้างห้องใหม่
   socket.on("createRoom", ({ playerName }) => {
     try {
+      console.log(`Creating room for player: ${playerName}`);
+      
       if (!playerName || typeof playerName !== 'string') {
         return socket.emit("errorMessage", { message: "Invalid player name" });
       }
 
-      // สร้างรหัสห้องและข้อมูลห้อง
+      // สร้างรหัสห้อง
       const roomCode = generateRoomCode();
+      
+      // สร้างข้อมูลห้อง
       const newRoom = {
-        code: roomCode,
+        roomCode,
         host: socket.id,
         hostName: playerName,
-        players: [{ id: socket.id, name: playerName, isHost: true }],
+        players: [{ id: socket.id, name: playerName, isHost: true, isConnected: true }],
         settings: {
           gameTimeInMinutes: 5,
           spiesCount: 1,
@@ -69,229 +79,293 @@ io.on("connection", (socket) => {
           location: null,
           spyIds: [],
           votes: [],
-          timer: null
+          startTime: null,
+          endTime: null
         }
       };
 
-      // เก็บห้องใน Map และเข้าร่วมห้อง
+      // เก็บข้อมูลห้อง
       rooms.set(roomCode, newRoom);
       socket.join(roomCode);
 
-      // แจ้งผู้เล่นว่าสร้างห้องสำเร็จ
+      console.log(`Room created: ${roomCode} by ${playerName}`);
+
+      // แจ้งผู้เล่น
       socket.emit("roomCreated", {
         roomCode: roomCode,
         isHost: true,
         settings: newRoom.settings
       });
 
-      // อัปเดตรายการผู้เล่น
+      // อัปเดตรายชื่อผู้เล่น
       io.to(roomCode).emit("updatePlayers", {
         players: newRoom.players,
         host: newRoom.hostName,
         hostId: newRoom.host
       });
-
-      console.log(`Room created: ${roomCode} by ${playerName}`);
+      
     } catch (error) {
       console.error("Error creating room:", error);
       socket.emit("errorMessage", { message: "Failed to create room" });
     }
   });
 
-  // เข้าร่วมห้องที่มีอยู่
+  // เข้าร่วมห้อง
   socket.on("joinRoom", ({ roomCode, playerName }) => {
     try {
-      if (!roomCode || !playerName || typeof roomCode !== 'string' || typeof playerName !== 'string') {
+      console.log(`Player ${playerName} attempting to join room ${roomCode}`);
+      
+      if (!roomCode || !playerName) {
         return socket.emit("errorMessage", { message: "Invalid room code or player name" });
       }
 
-      // ตรวจสอบว่าห้องมีอยู่
-      const room = rooms.get(roomCode);
-      if (!room) {
+      // ตรวจสอบว่าห้องมีอยู่จริง
+      if (!rooms.has(roomCode)) {
         return socket.emit("errorMessage", { message: "Room not found" });
       }
 
-      // ตรวจสอบว่าเกมเริ่มไปแล้วหรือไม่
+      const room = rooms.get(roomCode);
+
+      // ตรวจสอบว่าเกมเริ่มไปแล้วหรือยัง
       if (room.gameState.active) {
-        return socket.emit("errorMessage", { message: "Game already in progress" });
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (!existingPlayer) {
+          return socket.emit("errorMessage", { message: "Game already in progress" });
+        }
       }
 
-      // ตรวจสอบว่าห้องเต็มหรือไม่
+      // ตรวจสอบจำนวนผู้เล่นเต็มหรือยัง
       if (room.players.length >= room.settings.maxPlayers) {
-        return socket.emit("errorMessage", { message: "Room is full" });
+        const existingPlayer = room.players.find(p => p.id === socket.id);
+        if (!existingPlayer) {
+          return socket.emit("errorMessage", { message: "Room is full" });
+        }
       }
 
-      // ตรวจสอบว่าผู้เล่นอยู่ในห้องแล้วหรือไม่
+      // ตรวจสอบว่าผู้เล่นอยู่ในห้องนี้แล้วหรือไม่ (อาจเป็นการเชื่อมต่อใหม่)
       const existingPlayerIndex = room.players.findIndex(p => p.id === socket.id);
+      
       if (existingPlayerIndex !== -1) {
-        // ผู้เล่นอยู่ในห้องแล้ว - อาจเป็นการรีโหลดหรือรีคอนเน็กต์
+        // อัปเดตสถานะการเชื่อมต่อ
+        room.players[existingPlayerIndex].isConnected = true;
+        
         socket.join(roomCode);
+        
+        // ส่งข้อมูลห้องกลับไป
         socket.emit("roomJoined", {
           roomCode,
           playerName: room.players[existingPlayerIndex].name,
           isHost: room.players[existingPlayerIndex].isHost,
           settings: room.settings
         });
+        
+        console.log(`Player reconnected to room ${roomCode}: ${room.players[existingPlayerIndex].name}`);
       } else {
-        // ตรวจสอบชื่อซ้ำและทำให้ชื่อไม่ซ้ำกัน
+        // ทำให้ชื่อไม่ซ้ำกัน
         let uniqueName = playerName;
         let counter = 1;
         while (room.players.some(p => p.name === uniqueName)) {
           uniqueName = `${playerName}_${counter}`;
           counter++;
         }
-
+        
         // เพิ่มผู้เล่นเข้าห้อง
         room.players.push({
           id: socket.id,
           name: uniqueName,
-          isHost: false
+          isHost: false,
+          isConnected: true
         });
-
+        
         socket.join(roomCode);
+        
+        // ส่งข้อมูลห้องกลับไป
         socket.emit("roomJoined", {
           roomCode,
           playerName: uniqueName,
           isHost: false,
           settings: room.settings
         });
+        
+        console.log(`Player joined room ${roomCode}: ${uniqueName}`);
       }
 
-      // อัปเดตรายการผู้เล่น
+      // อัปเดตรายชื่อผู้เล่นสำหรับทุกคนในห้อง
       io.to(roomCode).emit("updatePlayers", {
         players: room.players,
         host: room.hostName,
         hostId: room.host
       });
 
-      // แจ้งว่ามีผู้เล่นพอที่จะเริ่มเกมได้หรือไม่
+      // ตรวจสอบว่ามีผู้เล่นพอเริ่มเกมหรือไม่
       if (room.players.length >= 4) {
         io.to(roomCode).emit("canStartGame", true);
       }
 
-      console.log(`Player ${playerName} joined room ${roomCode}`);
+      // ถ้าเกมเริ่มไปแล้ว ส่งข้อมูลเกมให้ผู้เล่น
+      if (room.gameState.active) {
+        const playerObj = room.players.find(p => p.id === socket.id);
+        if (playerObj) {
+          const isSpy = room.gameState.spyIds.includes(socket.id);
+          const role = isSpy ? "Spy" : "Civilian";
+          const locationToSend = isSpy ? "Unknown" : room.gameState.location;
+          
+          console.log(`Sending game data to ${playerObj.name}:`, {
+            role: role,
+            location: locationToSend
+          });
+          
+          socket.emit("gameStarted", { 
+            role, 
+            location: locationToSend,
+            allLocations: locations,
+            timer: calculateRemainingTime(room)
+          });
+          
+          socket.emit("updateTimer", calculateRemainingTime(room));
+        }
+      }
     } catch (error) {
       console.error("Error joining room:", error);
       socket.emit("errorMessage", { message: "Failed to join room" });
     }
   });
 
-  // อัปเดตการตั้งค่าห้อง (สำหรับโฮสต์เท่านั้น)
+  // อัปเดตการตั้งค่า
   socket.on("updateSettings", ({ roomCode, settings }) => {
     try {
-      const room = rooms.get(roomCode);
-      if (!room) {
+      if (!rooms.has(roomCode)) {
         return socket.emit("errorMessage", { message: "Room not found" });
       }
-
-      // ตรวจสอบว่าเป็นโฮสต์หรือไม่
+      
+      const room = rooms.get(roomCode);
+      
+      // ตรวจสอบว่าเป็นโฮสต์
       if (socket.id !== room.host) {
         return socket.emit("errorMessage", { message: "Only the host can update settings" });
       }
-
+      
+      console.log(`Updating settings for room ${roomCode}:`, settings);
+      
       // อัปเดตการตั้งค่า
       room.settings = {
         ...room.settings,
         ...settings
       };
-
-      // แจ้งผู้เล่นทุกคนเกี่ยวกับการตั้งค่าที่อัปเดต
+      
+      // แจ้งทุกคนในห้อง
       io.to(roomCode).emit("settingsUpdated", room.settings);
-      console.log(`Settings updated for room ${roomCode}`);
+      
+      console.log(`Settings updated for room ${roomCode}:`, room.settings);
     } catch (error) {
       console.error("Error updating settings:", error);
       socket.emit("errorMessage", { message: "Failed to update settings" });
     }
   });
 
-  // เริ่มเกม (สำหรับโฮสต์เท่านั้น)
+  // เริ่มเกม
   socket.on("startGame", ({ roomCode }) => {
     try {
-      const room = rooms.get(roomCode);
-      if (!room) {
+      console.log(`Attempting to start game in room ${roomCode}`);
+      
+      if (!rooms.has(roomCode)) {
         return socket.emit("errorMessage", { message: "Room not found" });
       }
-
-      // ตรวจสอบว่าเป็นโฮสต์หรือไม่
+      
+      const room = rooms.get(roomCode);
+      
+      // ตรวจสอบว่าเป็นโฮสต์
       if (socket.id !== room.host) {
         return socket.emit("errorMessage", { message: "Only the host can start the game" });
       }
-
-      // ตรวจสอบว่ามีผู้เล่นพอหรือไม่
+      
+      // ตรวจสอบจำนวนผู้เล่น
       if (room.players.length < 4) {
         return socket.emit("errorMessage", { message: "Need at least 4 players to start" });
       }
-
-      // เลือกสถานที่แบบสุ่ม
+      
+      // เลือกสถานที่สุ่ม
       const randomLocation = locations[Math.floor(Math.random() * locations.length)];
-
-      // เลือกสปายแบบสุ่ม
+      
+      // เลือกสปายตามการตั้งค่า
       const playerIds = room.players.map(p => p.id);
       const spyIds = [];
-
-      // สุ่มเลือกจำนวนสปายตามการตั้งค่า
+      
+      // สุ่มเลือกตามจำนวนสปายที่ตั้งค่า
       for (let i = 0; i < room.settings.spiesCount; i++) {
         if (playerIds.length > spyIds.length) {
           let randomIndex;
           do {
             randomIndex = Math.floor(Math.random() * playerIds.length);
           } while (spyIds.includes(playerIds[randomIndex]));
-
+          
           spyIds.push(playerIds[randomIndex]);
         }
       }
-
+      
+      // คำนวณเวลาสิ้นสุดเกม
+      const startTime = new Date();
+      const endTime = new Date(startTime.getTime() + (room.settings.gameTimeInMinutes * 60 * 1000));
+      
       // อัปเดตสถานะเกม
       room.gameState = {
         active: true,
         location: randomLocation,
         spyIds: spyIds,
-        startTime: Date.now(),
-        endTime: Date.now() + (room.settings.gameTimeInMinutes * 60 * 1000),
+        startTime: startTime,
+        endTime: endTime,
         votes: []
       };
-
+      
+      console.log(`Game started in room ${roomCode}:`);
+      console.log(`- Location: ${randomLocation}`);
+      console.log(`- Spies: ${spyIds.join(', ')}`);
+      console.log(`- Game time: ${room.settings.gameTimeInMinutes} minutes`);
+      
       // ส่งข้อมูลเกมให้ผู้เล่นแต่ละคน
-      room.players.forEach((player) => {
-        const isSpy = spyIds.includes(player.id);
-        io.to(player.id).emit("gameStarted", {
-          role: isSpy ? "Spy" : "Civilian",
-          location: isSpy ? "Unknown" : randomLocation,
-          allLocations: locations,
-          timer: room.settings.gameTimeInMinutes * 60
-        });
-      });
-
-      // เริ่มตัวจับเวลา
       const timerDuration = room.settings.gameTimeInMinutes * 60;
+      
+      for (const player of room.players) {
+        if (!player.isConnected) continue;
+        
+        const isSpy = spyIds.includes(player.id);
+        const role = isSpy ? "Spy" : "Civilian";
+        const locationToSend = isSpy ? "Unknown" : randomLocation;
+        
+        console.log(`Sending game data to ${player.name}:`);
+        console.log(`- Role: ${role}`);
+        console.log(`- Location: ${locationToSend}`);
+        console.log(`- Timer: ${timerDuration} seconds`);
+        
+        // ส่งข้อมูลเกมโดยตรงไปที่ผู้เล่นแต่ละคน
+        io.to(player.id).emit("gameStarted", {
+          role: role,
+          location: locationToSend,
+          allLocations: locations,
+          timer: timerDuration
+        });
+      }
+      
+      // ส่งตัวจับเวลาให้ทุกคนในห้อง
       io.to(roomCode).emit("startTimer", timerDuration);
-
-      console.log(`Game started in room ${roomCode}. Location: ${randomLocation}`);
-
-      // ตั้งเวลาสำหรับเกม
-      let timeRemaining = timerDuration;
-      room.gameState.timer = setInterval(() => {
-        if (timeRemaining > 0) {
-          timeRemaining--;
-          io.to(roomCode).emit("updateTimer", timeRemaining);
-        } else {
-          clearInterval(room.gameState.timer);
-          io.to(roomCode).emit("startVoting");
-        }
-      }, 1000);
+      
+      // ตั้งเวลาเกม
+      startGameTimer(roomCode, timerDuration);
+      
     } catch (error) {
       console.error("Error starting game:", error);
       socket.emit("errorMessage", { message: "Failed to start game" });
     }
   });
 
-  // ส่งข้อความแชท
+  // รับข้อความแชท
   socket.on("sendMessage", ({ roomCode, message }) => {
     try {
+      if (!rooms.has(roomCode)) return;
+      
       const room = rooms.get(roomCode);
-      if (!room) return;
-
       const player = room.players.find(p => p.id === socket.id);
+      
       if (player) {
         io.to(roomCode).emit("receiveMessage", {
           sender: player.name,
@@ -303,37 +377,42 @@ io.on("connection", (socket) => {
     }
   });
 
-  // โหวต
+  // รับการโหวต
   socket.on("castVote", ({ roomCode, targetId }) => {
     try {
+      if (!rooms.has(roomCode)) return;
+      
       const room = rooms.get(roomCode);
-      if (!room || !room.gameState.active) return;
-
+      if (!room.gameState.active) return;
+      
       // ตรวจสอบว่าผู้เล่นได้โหวตไปแล้วหรือไม่
       const existingVoteIndex = room.gameState.votes.findIndex(v => v.voterId === socket.id);
-
+      
       if (existingVoteIndex !== -1) {
-        // อัปเดตการโหวตที่มีอยู่
+        // อัปเดตการโหวต
         room.gameState.votes[existingVoteIndex].targetId = targetId;
       } else {
-        // เพิ่มการโหวตใหม่
+        // เพิ่มการโหวต
         room.gameState.votes.push({
           voterId: socket.id,
           targetId
         });
       }
-
+      
       // หาชื่อผู้โหวต
       const voter = room.players.find(p => p.id === socket.id);
-
-      // แจ้งห้องว่ามีการโหวต (แต่ไม่บอกว่าโหวตให้ใคร)
+      
+      // แจ้งทุกคนในห้องว่ามีคนโหวต
       io.to(roomCode).emit("playerVoted", {
         voterId: socket.id,
         voterName: voter ? voter.name : "Unknown player"
       });
-
-      // ตรวจสอบว่าทุกคนโหวตหรือยัง
-      if (room.gameState.votes.length === room.players.length) {
+      
+      console.log(`Player ${voter ? voter.name : socket.id} voted in room ${roomCode}`);
+      
+      // ตรวจสอบว่าทุกคนโหวตหรือยัง (เฉพาะคนที่ยังเชื่อมต่ออยู่)
+      const connectedPlayers = room.players.filter(p => p.isConnected);
+      if (room.gameState.votes.length >= connectedPlayers.length) {
         endGameWithVotes(roomCode);
       }
     } catch (error) {
@@ -344,7 +423,7 @@ io.on("connection", (socket) => {
   // ออกจากห้อง
   socket.on("leaveRoom", ({ roomCode }) => {
     try {
-      leaveRoomHandler(socket, roomCode);
+      handlePlayerLeaving(socket.id, roomCode);
     } catch (error) {
       console.error("Error leaving room:", error);
     }
@@ -353,12 +432,12 @@ io.on("connection", (socket) => {
   // จัดการการตัดการเชื่อมต่อ
   socket.on("disconnect", () => {
     try {
-      console.log(`User disconnected: ${socket.id}`);
+      console.log(`Socket disconnected: ${socket.id}`);
       
       // ตรวจสอบทุกห้องที่ผู้เล่นอาจอยู่
       for (const [roomCode, room] of rooms.entries()) {
         if (room.players.some(p => p.id === socket.id)) {
-          leaveRoomHandler(socket, roomCode);
+          handlePlayerLeaving(socket.id, roomCode);
         }
       }
     } catch (error) {
@@ -367,83 +446,153 @@ io.on("connection", (socket) => {
   });
 });
 
-// ฟังก์ชันช่วยจัดการการออกจากห้อง
-function leaveRoomHandler(socket, roomCode) {
+// ฟังก์ชันจัดการผู้เล่นออกจากห้อง
+function handlePlayerLeaving(playerId, roomCode) {
+  if (!rooms.has(roomCode)) return;
+  
   const room = rooms.get(roomCode);
-  if (!room) return;
-
-  // หาผู้เล่นในห้อง
-  const playerIndex = room.players.findIndex(p => p.id === socket.id);
+  const playerIndex = room.players.findIndex(p => p.id === playerId);
+  
   if (playerIndex === -1) return;
-
+  
   const player = room.players[playerIndex];
-  console.log(`Player ${player.name} left room ${roomCode}`);
-
-  // ถ้าเกมกำลังเล่นอยู่ ให้ทำเครื่องหมายว่าผู้เล่นตัดการเชื่อมต่อ แต่ไม่ลบออก
+  const wasHost = player.isHost;
+  
+  // ถ้าเกมกำลังเล่นอยู่ ให้ทำเครื่องหมายว่าหลุดการเชื่อมต่อแต่ไม่ลบออก
   if (room.gameState.active) {
+    room.players[playerIndex].isConnected = false;
+    
+    // แจ้งทุกคนว่ามีผู้เล่นหลุดการเชื่อมต่อ
     io.to(roomCode).emit("playerDisconnected", {
-      playerId: socket.id,
+      playerId: playerId,
       playerName: player.name
     });
+    
+    console.log(`Player ${player.name} disconnected from active game in room ${roomCode}`);
     return;
   }
-
+  
   // ลบผู้เล่นออกจากห้อง
   room.players.splice(playerIndex, 1);
-  socket.leave(roomCode);
-
+  
   // ถ้าเป็นโฮสต์ที่ออก ให้เลือกโฮสต์ใหม่
-  if (player.isHost && room.players.length > 0) {
+  if (wasHost && room.players.length > 0) {
     const newHost = room.players[0];
     room.host = newHost.id;
     room.hostName = newHost.name;
     newHost.isHost = true;
-
+    
     // แจ้งโฮสต์ใหม่
     io.to(newHost.id).emit("becameHost");
+    console.log(`New host assigned in room ${roomCode}: ${newHost.name}`);
   }
-
+  
   // ถ้าไม่มีผู้เล่นเหลือ ให้ลบห้อง
   if (room.players.length === 0) {
-    if (room.gameState.timer) {
-      clearInterval(room.gameState.timer);
+    if (gameTimers.has(roomCode)) {
+      clearInterval(gameTimers.get(roomCode));
+      gameTimers.delete(roomCode);
     }
+    
     rooms.delete(roomCode);
-    console.log(`Room ${roomCode} deleted (no players left)`);
+    console.log(`Room ${roomCode} deleted (no players remaining)`);
   } else {
-    // อัปเดตรายการผู้เล่น
+    // อัปเดตรายชื่อผู้เล่นสำหรับผู้เล่นที่เหลือ
     io.to(roomCode).emit("updatePlayers", {
       players: room.players,
       host: room.hostName,
       hostId: room.host
     });
-
+    
     // อัปเดตความสามารถในการเริ่มเกม
     io.to(roomCode).emit("canStartGame", room.players.length >= 4);
+    
+    console.log(`Player ${player.name} left room ${roomCode}`);
   }
 }
 
-// จบเกมและคำนวณผลลัพธ์
-function endGameWithVotes(roomCode) {
-  const room = rooms.get(roomCode);
-  if (!room || !room.gameState.active) return;
-
-  // หยุดตัวจับเวลา
-  if (room.gameState.timer) {
-    clearInterval(room.gameState.timer);
-    room.gameState.timer = null;
+// ฟังก์ชันเริ่มตัวจับเวลาเกม
+function startGameTimer(roomCode, duration) {
+  // ยกเลิกตัวจับเวลาที่มีอยู่
+  if (gameTimers.has(roomCode)) {
+    clearInterval(gameTimers.get(roomCode));
+    gameTimers.delete(roomCode);
   }
+  
+  let timeRemaining = duration;
+  
+  console.log(`Starting timer for room ${roomCode}: ${timeRemaining} seconds`);
+  
+  // ส่งเวลาเริ่มต้นทันที
+  io.to(roomCode).emit("updateTimer", timeRemaining);
+  
+  const timerId = setInterval(() => {
+    if (timeRemaining > 0) {
+      timeRemaining--;
+      
+      // ส่งการอัปเดตเวลาไปยังทุกคนในห้อง
+      io.to(roomCode).emit("updateTimer", timeRemaining);
+      
+      // Log เพื่อตรวจสอบการส่งเวลา (ทุก 15 วินาที)
+      if (timeRemaining % 15 === 0 || timeRemaining <= 10) {
+        console.log(`Timer update for room ${roomCode}: ${timeRemaining} seconds remaining`);
+      }
+      
+    } else {
+      // เวลาหมด
+      clearInterval(timerId);
+      gameTimers.delete(roomCode);
+      
+      console.log(`Timer finished for room ${roomCode}`);
+      
+      // ตรวจสอบว่าห้องยังมีอยู่หรือไม่
+      if (rooms.has(roomCode)) {
+        const room = rooms.get(roomCode);
+        if (room && room.gameState.active) {
+          console.log(`Starting voting phase for room ${roomCode}`);
+          io.to(roomCode).emit("startVoting");
+        }
+      }
+    }
+  }, 1000);
+  
+  gameTimers.set(roomCode, timerId);
+}
 
-  // นับคะแนนโหวตสำหรับแต่ละผู้เล่น
+// ฟังก์ชันคำนวณเวลาที่เหลือ
+function calculateRemainingTime(room) {
+  if (!room.gameState.active || !room.gameState.endTime) return 0;
+  
+  const now = new Date();
+  const endTime = new Date(room.gameState.endTime);
+  const remainingMs = endTime - now;
+  
+  return Math.max(0, Math.floor(remainingMs / 1000));
+}
+
+// ฟังก์ชันจบเกมและนับคะแนนโหวต
+function endGameWithVotes(roomCode) {
+  if (!rooms.has(roomCode)) return;
+  
+  const room = rooms.get(roomCode);
+  if (!room.gameState.active) return;
+  
+  // ยกเลิกตัวจับเวลา
+  if (gameTimers.has(roomCode)) {
+    clearInterval(gameTimers.get(roomCode));
+    gameTimers.delete(roomCode);
+  }
+  
+  // นับคะแนนโหวต
   const voteCounts = {};
   for (const vote of room.gameState.votes) {
     voteCounts[vote.targetId] = (voteCounts[vote.targetId] || 0) + 1;
   }
-
-  // หาผู้เล่นที่ถูกโหวตมากที่สุด
+  
+  // หาผู้ที่ถูกโหวตมากที่สุด
   let maxVotes = 0;
   let mostVotedIds = [];
-
+  
   for (const [playerId, count] of Object.entries(voteCounts)) {
     if (count > maxVotes) {
       maxVotes = count;
@@ -452,12 +601,12 @@ function endGameWithVotes(roomCode) {
       mostVotedIds.push(playerId);
     }
   }
-
+  
   // กำหนดผลลัพธ์
   let result;
-
+  
   if (mostVotedIds.length > 1) {
-    // เสมอกัน
+    // มีคะแนนเท่ากัน
     result = {
       outcome: "tie",
       message: "There was a tie in voting! The spy escapes!",
@@ -480,7 +629,7 @@ function endGameWithVotes(roomCode) {
     const accusedId = mostVotedIds[0];
     const accusedPlayer = room.players.find(p => p.id === accusedId);
     const accusedIsSpy = room.gameState.spyIds.includes(accusedId);
-
+    
     result = {
       outcome: accusedIsSpy ? "civilians-win" : "spy-wins",
       message: accusedIsSpy
@@ -502,22 +651,47 @@ function endGameWithVotes(roomCode) {
       })
     };
   }
-
-  // ส่งผลลัพธ์ให้ผู้เล่นทุกคน
-  io.to(roomCode).emit("gameOver", result);
-
-  // รีเซ็ตสถานะเกมแต่เก็บห้องไว้
-  room.gameState = {
-    active: false,
-    location: null,
-    spyIds: [],
-    votes: [],
-    timer: null
-  };
-
+  
   console.log(`Game over in room ${roomCode}. Result: ${result.outcome}`);
+  console.log("Game result details:", result);
+  
+  // ส่งผลลัพธ์ให้ทุกคน
+  io.to(roomCode).emit("gameOver", result);
+  
+  // รีเซ็ตสถานะเกมแต่เก็บข้อมูลห้องไว้
+  room.gameState.active = false;
+  
+  // ตรวจสอบว่าเริ่มเกมใหม่ได้หรือไม่
+  if (room.players.filter(p => p.isConnected).length >= 4) {
+    io.to(roomCode).emit("canStartGame", true);
+  }
 }
 
-// เริ่มเซิร์ฟเวอร์
+// API route สำหรับตรวจสอบห้อง (สำหรับการพัฒนาเท่านั้น)
+app.get('/api/room/:roomCode', (req, res) => {
+  const roomCode = req.params.roomCode;
+  if (rooms.has(roomCode)) {
+    const room = rooms.get(roomCode);
+    res.json({
+      roomCode,
+      playersCount: room.players.length,
+      isActive: room.gameState.active,
+      settings: room.settings,
+      playersData: room.players.map(p => ({
+        name: p.name,
+        isHost: p.isHost,
+        isConnected: p.isConnected
+      }))
+    });
+  } else {
+    res.status(404).json({ error: 'Room not found' });
+  }
+});
+
+// ส่งหน้าเว็บแอป
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

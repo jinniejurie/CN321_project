@@ -6,8 +6,8 @@ import VotingUI from "./VotingUI";
 import GameResultUI from "./GameResultUI";
 
 const Game = () => {
-  const { socket, isConnected } = useSocket();
   const navigate = useNavigate();
+  const { socket, isConnected } = useSocket();
   
   const [roomCode, setRoomCode] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -23,10 +23,26 @@ const Game = () => {
   const [gameResult, setGameResult] = useState(null);
   const [disconnected, setDisconnected] = useState(false);
 
+  // แสดงค่าสถานะเพื่อดีบัก
+  useEffect(() => {
+    console.log("Current game state:", {
+      role,
+      location,
+      timer,
+      gamePhase,
+      players: players.length
+    });
+  }, [role, location, timer, gamePhase, players]);
+  
   // Get information from localStorage
   useEffect(() => {
     const storedRoomCode = localStorage.getItem("roomCode");
     const storedPlayerName = localStorage.getItem("playerName");
+    
+    console.log("Retrieved from localStorage:", {
+      roomCode: storedRoomCode,
+      playerName: storedPlayerName
+    });
     
     if (storedRoomCode) {
       setRoomCode(storedRoomCode);
@@ -42,68 +58,82 @@ const Game = () => {
 
   // Set up game-specific socket listeners
   useEffect(() => {
-    if (!socket || !roomCode) return;
+    if (!socket) {
+      console.error("Socket is not initialized!");
+      return;
+    }
     
-    // Try to rejoin the room if we've been disconnected
-    if (isConnected && disconnected) {
-      socket.emit("joinRoom", { 
-        roomCode, 
-        playerName: playerName || "Player" 
-      });
-      setDisconnected(false);
+    if (!isConnected) {
+      console.warn("Socket is not connected!");
+    } else {
+      console.log("Socket connected:", socket.id);
+    }
+    
+    if (roomCode && playerName && isConnected) {
+      console.log(`Attempting to (re)join room ${roomCode} as ${playerName}`);
+      socket.emit("joinRoom", { roomCode, playerName });
     }
 
     // Handle updated player list
     const handleUpdatePlayers = (data) => {
-      setPlayers(data.players);
+      console.log("Players updated:", data);
+      setPlayers(data.players || []);
     };
 
     // Handle game initialization
     const handleGameStarted = (data) => {
-      console.log("Game Started! Role:", data.role, "Location:", data.location);
-      setRole(data.role);
-      setLocation(data.location);
+      console.log("Game Started event received:", data);
+      setRole(data.role || "");
+      setLocation(data.location || "");
+      setAllLocations(data.allLocations || []);
       setGamePhase("playing");
-      
-      if (data.allLocations) {
-        setAllLocations(data.allLocations);
-      }
       
       // Reset any previous game state
       setGameResult(null);
       setVotedPlayers([]);
-      setMessages([]);
     };
 
     // Handle incoming chat messages
     const handleReceiveMessage = (msg) => {
+      console.log("Message received:", msg);
       setMessages(prev => [...prev, msg]);
     };
 
     // Handle timer updates
     const handleUpdateTimer = (time) => {
+      console.log("Timer update:", time);
+      setTimer(time);
+    };
+
+    // Handle start timer event
+    const handleStartTimer = (time) => {
+      console.log("Start timer:", time);
       setTimer(time);
     };
 
     // Handle transition to voting phase
     const handleStartVoting = () => {
+      console.log("Starting voting phase");
       setGamePhase("voting");
       setVotedPlayers([]);
     };
 
     // Handle player votes
     const handlePlayerVoted = ({ voterId, voterName }) => {
+      console.log(`Player voted: ${voterName}`);
       setVotedPlayers(prev => [...prev, voterId]);
     };
 
     // Handle game results
     const handleGameOver = (result) => {
+      console.log("Game over! Result:", result);
       setGameResult(result);
       setGamePhase("result");
     };
 
     // Handle player disconnect event
     const handlePlayerDisconnected = ({ playerId, playerName }) => {
+      console.log(`Player disconnected: ${playerName}`);
       // Add message to chat
       setMessages(prev => [
         ...prev, 
@@ -114,17 +144,10 @@ const Game = () => {
       ]);
     };
 
-    // Handle connection state
-    const handleDisconnect = () => {
-      setDisconnected(true);
-    };
-
-    const handleConnect = () => {
-      if (roomCode && playerName) {
-        // Try to rejoin room
-        socket.emit("joinRoom", { roomCode, playerName });
-        setDisconnected(false);
-      }
+    // Handle error messages
+    const handleErrorMessage = (data) => {
+      console.error("Error from server:", data.message);
+      alert(data.message);
     };
 
     // Register event listeners
@@ -132,31 +155,33 @@ const Game = () => {
     socket.on("gameStarted", handleGameStarted);
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("updateTimer", handleUpdateTimer);
+    socket.on("startTimer", handleStartTimer);
     socket.on("startVoting", handleStartVoting);
     socket.on("playerVoted", handlePlayerVoted);
     socket.on("gameOver", handleGameOver);
     socket.on("playerDisconnected", handlePlayerDisconnected);
-    socket.on("disconnect", handleDisconnect);
-    socket.on("connect", handleConnect);
+    socket.on("errorMessage", handleErrorMessage);
 
     // Clean up listeners when component unmounts
     return () => {
+      console.log("Cleaning up socket listeners");
       socket.off("updatePlayers", handleUpdatePlayers);
       socket.off("gameStarted", handleGameStarted);
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("updateTimer", handleUpdateTimer);
+      socket.off("startTimer", handleStartTimer);
       socket.off("startVoting", handleStartVoting);
       socket.off("playerVoted", handlePlayerVoted);
       socket.off("gameOver", handleGameOver);
       socket.off("playerDisconnected", handlePlayerDisconnected);
-      socket.off("disconnect", handleDisconnect);
-      socket.off("connect", handleConnect);
+      socket.off("errorMessage", handleErrorMessage);
     };
-  }, [socket, roomCode, playerName, isConnected, disconnected, navigate]);
+  }, [socket, roomCode, playerName, isConnected, navigate]);
 
   // Send chat message
   const sendMessage = () => {
     if (message.trim() && socket && isConnected && roomCode) {
+      console.log(`Sending message to room ${roomCode}:`, message);
       socket.emit("sendMessage", { roomCode, message: message.trim() });
       setMessage("");
     }
@@ -165,6 +190,7 @@ const Game = () => {
   // Cast vote during voting phase
   const castVote = (targetId) => {
     if (socket && isConnected && gamePhase === "voting" && roomCode) {
+      console.log(`Casting vote for player: ${targetId}`);
       socket.emit("castVote", { roomCode, targetId });
     }
   };
@@ -175,7 +201,7 @@ const Game = () => {
   };
 
   // Show connection status message if disconnected
-  if (disconnected) {
+  if (!isConnected) {
     return (
       <div className="disconnected-screen">
         <h2>Disconnected from server</h2>
@@ -183,9 +209,12 @@ const Game = () => {
         <button 
           className="reconnect-button"
           onClick={() => {
-            if (socket && socket.connected) {
-              socket.emit("joinRoom", { roomCode, playerName });
-              setDisconnected(false);
+            if (socket) {
+              console.log("Manually attempting to reconnect...");
+              socket.connect();
+              if (socket.connected && roomCode && playerName) {
+                socket.emit("joinRoom", { roomCode, playerName });
+              }
             }
           }}
         >
@@ -204,6 +233,14 @@ const Game = () => {
   // Render the appropriate game phase
   return (
     <div className="game-page">
+      {/* Debug info */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="debug-info">
+          <p>Room: {roomCode} | Phase: {gamePhase} | Role: {role}</p>
+          <p>Location: {location} | Timer: {timer}s</p>
+        </div>
+      )}
+      
       {gamePhase === "playing" && (
         <GameUI
           role={role}
