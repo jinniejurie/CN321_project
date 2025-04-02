@@ -1,6 +1,6 @@
 // TutorialUI.jsx
 import React from "react";
-import "./Tutorial.css";
+import "../styles/Tutorial.css";
 import { Link } from "react-router-dom";
  
 const TutorialUI = () => {
