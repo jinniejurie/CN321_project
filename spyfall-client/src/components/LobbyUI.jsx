@@ -31,6 +31,12 @@ const LobbyUI = ({
   const [spiesCount, setSpiesCount] = useState(settings.spiesCount || 1);
   const [maxPlayers, setMaxPlayers] = useState(settings.maxPlayers || 8);
 
+  useEffect(() => {
+    setGameMinutes(settings.gameTimeInMinutes || 5);
+    setSpiesCount(settings.spiesCount || 1);
+    setMaxPlayers(settings.maxPlayers || 8);
+  }, [settings]);
+
   // ฟังก์ชันจัดการการส่งฟอร์มสร้างห้อง
   const handleCreateSubmit = (e) => {
     e.preventDefault();
