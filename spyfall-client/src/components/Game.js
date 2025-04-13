@@ -12,7 +12,7 @@ const Game = () => {
   const [players, setPlayers] = useState([]);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState("");
-  const [timer, setTimer] = useState(300);
+  const [timer, setTimer] = useState(100);
   const [playerName, setPlayerName] = useState("");
   const [gameState, setGameState] = useState("playing"); // playing, voting, results
   const [gameResults, setGameResults] = useState(null);

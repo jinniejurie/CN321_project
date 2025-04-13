@@ -11,11 +11,11 @@ const io = new Server(server, {
 });
 
 let players = [];
-const locations = ["Beach", "Restaurant", "Airport", "Bank", "School"];
+const locations = require('./locations');
 let gameData = { 
   location: "", 
   spyId: null, 
-  timer: 300, 
+  timer: 100, 
   votes: [], 
   gamePhase: "waiting" // waiting, playing, voting, ended
 };
@@ -132,8 +132,9 @@ io.on("connection", (socket) => {
       
       // If the game is still in progress, keep the player in the list
       // Otherwise, this is the same as leaving
-      if (gameData.gamePhase === "waiting" || gameData.gamePhase === "ended") {
-        // Nothing special to do, player will be redirected to lobby page
+      if (gameData.gamePhase === "ended") {
+        // เรียกฟังก์ชัน resetGame เมื่อผู้เล่นคนแรกกด Return to Lobby
+        resetGame();
       }
     }
   });
@@ -166,7 +167,7 @@ function startGame() {
 
   gameData.location = randomLocation;
   gameData.spyId = spy.id;
-  gameData.timer = 300;
+  gameData.timer = 100;
   gameData.votes = [];
 
   console.log(`Game started! Location: ${randomLocation}, Spy: ${spy.name} (ID: ${spy.id})`);
@@ -253,8 +254,6 @@ function endGame() {
   
   console.log(`Game over! Winner: ${winner}, Spy: ${spyName}, Location: ${gameData.location}`);
   
-  // Reset game state but don't automatically start a new game
-  resetGame();
 }
 
 function resetGame() {
@@ -267,7 +266,7 @@ function resetGame() {
   // Don't clear players array, but reset game data
   gameData.location = "";
   gameData.spyId = null;
-  gameData.timer = 300;
+  gameData.timer = 100;
   gameData.votes = [];
   
   io.emit("gameReset");
