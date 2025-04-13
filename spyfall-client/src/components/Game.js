@@ -8,7 +8,7 @@ import GameResultUI from "./GameResultUI";
 const Game = () => {
   const navigate = useNavigate();
   const { socket, isConnected } = useSocket();
-  
+
   const [roomCode, setRoomCode] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [role, setRole] = useState("");
@@ -33,24 +33,45 @@ const Game = () => {
       players: players.length
     });
   }, [role, location, timer, gamePhase, players]);
-  
+
+  // ตัวจับเวลาในฝั่ง client สำรอง
+  useEffect(() => {
+    if (gamePhase === "playing" && timer > 0) {
+      const intervalId = setInterval(() => {
+        setTimer(prevTimer => {
+          const newTime = prevTimer - 1;
+          // เมื่อเวลาเป็น 0 ให้เปลี่ยนเป็นหน้าโหวต
+          if (newTime <= 0) {
+            console.log("CLIENT TIMER REACHED ZERO - SWITCHING TO VOTING");
+            clearInterval(intervalId);
+            setGamePhase("voting");
+            return 0;
+          }
+          return newTime;
+        });
+      }, 1000);
+
+      return () => clearInterval(intervalId);
+    }
+  }, [gamePhase, timer]);
+
   // Get information from localStorage
   useEffect(() => {
     const storedRoomCode = localStorage.getItem("roomCode");
     const storedPlayerName = localStorage.getItem("playerName");
-    
+
     console.log("Retrieved from localStorage:", {
       roomCode: storedRoomCode,
       playerName: storedPlayerName
     });
-    
+
     if (storedRoomCode) {
       setRoomCode(storedRoomCode);
     } else {
       // If no room code, return to lobby
       navigate("/lobby");
     }
-    
+
     if (storedPlayerName) {
       setPlayerName(storedPlayerName);
     }
@@ -62,13 +83,13 @@ const Game = () => {
       console.error("Socket is not initialized!");
       return;
     }
-    
+
     if (!isConnected) {
       console.warn("Socket is not connected!");
     } else {
       console.log("Socket connected:", socket.id);
     }
-    
+
     if (roomCode && playerName && isConnected) {
       console.log(`Attempting to (re)join room ${roomCode} as ${playerName}`);
       socket.emit("joinRoom", { roomCode, playerName });
@@ -77,21 +98,41 @@ const Game = () => {
     // Handle updated player list
     const handleUpdatePlayers = (data) => {
       console.log("Players updated:", data);
-      setPlayers(data.players || []);
+      if (data && data.players) {
+        setPlayers(data.players);
+      }
     };
 
     // Handle game initialization
     const handleGameStarted = (data) => {
       console.log("Game Started event received:", data);
-      setRole(data.role || "");
-      setLocation(data.location || "");
-      setAllLocations(data.allLocations || []);
-      setGamePhase("playing");
-      
-      // Reset any previous game state
-      setGameResult(null);
-      setVotedPlayers([]);
+      if (data) {
+        setRole(data.role || "");
+        setLocation(data.location || "");
+        if (data.allLocations && data.allLocations.length > 0) {
+          setAllLocations(data.allLocations);
+        }
+        setGamePhase("playing");
+
+        // Reset any previous game state
+        setGameResult(null);
+        setVotedPlayers([]);
+
+        // Set initial timer from server
+        if (data.timer) {
+          setTimer(data.timer);
+        }
+      }
     };
+
+    // สำหรับจัดการการเปลี่ยนเฟสเกม (เพิ่มเติม)
+    const handleGamePhaseChanged = (data) => {
+      console.log("Game phase changed:", data);
+      if (data && data.phase) {
+        setGamePhase(data.phase);
+      }
+    };
+
 
     // Handle incoming chat messages
     const handleReceiveMessage = (msg) => {
@@ -113,7 +154,7 @@ const Game = () => {
 
     // Handle transition to voting phase
     const handleStartVoting = () => {
-      console.log("Starting voting phase");
+      console.log("VOTING PHASE STARTED - SERVER EVENT");
       setGamePhase("voting");
       setVotedPlayers([]);
     };
@@ -136,10 +177,10 @@ const Game = () => {
       console.log(`Player disconnected: ${playerName}`);
       // Add message to chat
       setMessages(prev => [
-        ...prev, 
-        { 
-          sender: "System", 
-          message: `${playerName} has disconnected.` 
+        ...prev,
+        {
+          sender: "System",
+          message: `${playerName} has disconnected.`
         }
       ]);
     };
@@ -153,6 +194,7 @@ const Game = () => {
     // Register event listeners
     socket.on("updatePlayers", handleUpdatePlayers);
     socket.on("gameStarted", handleGameStarted);
+    socket.on("gamePhaseChanged", handleGamePhaseChanged);
     socket.on("receiveMessage", handleReceiveMessage);
     socket.on("updateTimer", handleUpdateTimer);
     socket.on("startTimer", handleStartTimer);
@@ -167,6 +209,7 @@ const Game = () => {
       console.log("Cleaning up socket listeners");
       socket.off("updatePlayers", handleUpdatePlayers);
       socket.off("gameStarted", handleGameStarted);
+      socket.off("gamePhaseChanged", handleGamePhaseChanged);
       socket.off("receiveMessage", handleReceiveMessage);
       socket.off("updateTimer", handleUpdateTimer);
       socket.off("startTimer", handleStartTimer);
@@ -206,7 +249,7 @@ const Game = () => {
       <div className="disconnected-screen">
         <h2>Disconnected from server</h2>
         <p>Attempting to reconnect...</p>
-        <button 
+        <button
           className="reconnect-button"
           onClick={() => {
             if (socket) {
@@ -220,7 +263,7 @@ const Game = () => {
         >
           Try Reconnecting Manually
         </button>
-        <button 
+        <button
           className="return-button"
           onClick={() => navigate("/lobby")}
         >
@@ -230,17 +273,28 @@ const Game = () => {
     );
   }
 
+  // Debug Info
+  const renderDebugInfo = () => (
+    <div className="debug-info" style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      background: 'rgba(0,0,0,0.7)',
+      color: 'white',
+      padding: '5px',
+      fontSize: '12px',
+      zIndex: 9999
+    }}>
+      <p>Phase: {gamePhase} | Role: {role}</p>
+      <p>Location: {location} | Timer: {timer}s</p>
+    </div>
+  );
+
   // Render the appropriate game phase
   return (
     <div className="game-page">
-      {/* Debug info */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="debug-info">
-          <p>Room: {roomCode} | Phase: {gamePhase} | Role: {role}</p>
-          <p>Location: {location} | Timer: {timer}s</p>
-        </div>
-      )}
-      
+      {renderDebugInfo()}
+
       {gamePhase === "playing" && (
         <GameUI
           role={role}
@@ -255,7 +309,7 @@ const Game = () => {
           timer={timer}
         />
       )}
-      
+
       {gamePhase === "voting" && (
         <VotingUI
           players={players}
@@ -266,9 +320,9 @@ const Game = () => {
           roomCode={roomCode}
         />
       )}
-      
+
       {gamePhase === "result" && gameResult && (
-        <GameResultUI 
+        <GameResultUI
           result={gameResult}
           returnToLobby={returnToLobby}
           roomCode={roomCode}

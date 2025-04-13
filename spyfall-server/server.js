@@ -324,7 +324,8 @@ io.on("connection", (socket) => {
       
       // ส่งข้อมูลเกมให้ผู้เล่นแต่ละคน
       const timerDuration = room.settings.gameTimeInMinutes * 60;
-      
+      console.log(`Timer duration set to: ${timerDuration} seconds (${room.settings.gameTimeInMinutes} minutes)`);
+
       for (const player of room.players) {
         if (!player.isConnected) continue;
         
@@ -550,7 +551,23 @@ function startGameTimer(roomCode, duration) {
         const room = rooms.get(roomCode);
         if (room && room.gameState.active) {
           console.log(`Starting voting phase for room ${roomCode}`);
+          
+          // ส่ง event หลายครั้งเพื่อให้แน่ใจว่า client ได้รับ
           io.to(roomCode).emit("startVoting");
+          
+          // ส่งซ้ำอีกครั้งหลังจาก 1 วินาที เพื่อให้แน่ใจว่าทุกคนได้รับ
+          setTimeout(() => {
+            io.to(roomCode).emit("startVoting");
+            console.log("Sending startVoting event again (retry 1)");
+          }, 1000);
+          
+          setTimeout(() => {
+            io.to(roomCode).emit("startVoting");
+            console.log("Sending startVoting event again (retry 2)");
+          }, 2000);
+          
+          // ส่ง game phase change เป็นอีกทางเลือกหนึ่ง
+          io.to(roomCode).emit("gamePhaseChanged", { phase: "voting" });
         }
       }
     }
