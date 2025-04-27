@@ -14,12 +14,11 @@ const Game = () => {
   const [message, setMessage] = useState("");
   const [timer, setTimer] = useState(100);
   const [playerName, setPlayerName] = useState("");
-  const [gameState, setGameState] = useState("playing"); // playing, voting, results
+  const [gameState, setGameState] = useState("playing");
   const [gameResults, setGameResults] = useState(null);
   const [hasVoted, setHasVoted] = useState(false);
   const navigate = useNavigate();
 
-  // Get the player name from localStorage
   useEffect(() => {
     const storedName = localStorage.getItem("playerName");
     if (storedName) {
@@ -27,11 +26,9 @@ const Game = () => {
     }
   }, []);
 
-  // Set up game-specific socket listeners
   useEffect(() => {
     if (!socket) return;
     
-    // Re-join game if we have a name (handle page refreshes)
     if (playerName && isConnected) {
       socket.emit("joinGame", playerName);
     }
@@ -57,7 +54,6 @@ const Game = () => {
 
     const onUpdateTimer = (time) => {
       setTimer(time);
-      // When timer reaches 0, trigger the voting phase
       if (time === 0) {
         setGameState("voting");
       }
@@ -74,14 +70,12 @@ const Game = () => {
     };
 
     const onGameReset = () => {
-      // Reset game state for next game
       setGameState("playing");
       setTimer(300);
       setMessages([]);
       setHasVoted(false);
     };
 
-    // Register event listeners
     socket.on("updatePlayers", onUpdatePlayers);
     socket.on("gameStarted", onGameStarted);
     socket.on("receiveMessage", onReceiveMessage);
@@ -90,7 +84,6 @@ const Game = () => {
     socket.on("gameOver", onGameOver);
     socket.on("gameReset", onGameReset);
 
-    // Clean up listeners when component unmounts
     return () => {
       socket.off("updatePlayers", onUpdatePlayers);
       socket.off("gameStarted", onGameStarted);
@@ -123,14 +116,12 @@ const Game = () => {
     }
   };
 
-  // Format timer for display
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Render game content based on current state
   const renderGameContent = () => {
     switch (gameState) {
       case "voting":

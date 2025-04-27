@@ -11,22 +11,17 @@ const Lobby = () => {
   const { socket, isConnected } = useSocket();
 
   useEffect(() => {
-    // Make sure we have a socket before setting up listeners
     if (!socket) return;
 
-    // Handle player list updates
     const handleUpdatePlayers = (playerList) => {
       setPlayers(playerList);
-      // Automatically navigate to the game when we have 4 players
       if (playerList.length >= 4) {
         navigate("/game");
       }
     };
 
-    // Set up listeners
     socket.on("updatePlayers", handleUpdatePlayers);
 
-    // Clean up listeners when component unmounts
     return () => {
       socket.off("updatePlayers", handleUpdatePlayers);
     };
@@ -34,11 +29,9 @@ const Lobby = () => {
 
   const joinGame = () => {
     if (name.trim() && !joined && socket && isConnected) {
-      // Store the name in localStorage for persistence
       console.log("Storing player name:", name);
       localStorage.setItem("playerName", name);
       
-      // Emit the joinGame event
       socket.emit("joinGame", name);
       setJoined(true);
     }
