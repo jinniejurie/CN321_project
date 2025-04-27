@@ -1,5 +1,5 @@
 import React from "react";
-import "./Lobby.css";
+import "../styles/Lobby.css";
  
 const LobbyUI = ({ name, setName, joinGame, joined, players, playerCount }) => {
   return (
